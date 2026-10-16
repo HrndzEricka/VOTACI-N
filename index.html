@@ -134,6 +134,16 @@ td.proj{font-weight:900;min-width:170px}
 .general .spot.s1 .blk{height:180px}.general .spot .m{font-size:46px}
 @keyframes rise{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 @media (max-width:560px){.pods{grid-template-columns:1fr}.spot b{font-size:13px}.spot .m{font-size:30px}}
+.warnBar{background:#3a2a06;border:2px solid var(--gold);border-radius:14px;padding:12px 16px;font-weight:800;text-align:center}
+.wait{text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center;padding-block:26px}
+.wait .ic{font-size:60px;line-height:1;animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{50%{transform:scale(1.12)}}
+.votes td{vertical-align:top}
+.votes ol{margin:0;padding-left:20px;font-size:13px;line-height:1.45}
+.votes ol li::marker{font-weight:900;color:var(--gold)}
+.votes .vn{font-weight:900;white-space:nowrap}
+.votes .vg{display:block;font-size:12px;color:var(--mute);font-weight:700}
+.votes tr.profRow td{background:#2a2610}
 .confetti{position:fixed;inset:0;pointer-events:none;z-index:60}
 
 /* ---------- celular del estudiante ---------- */
@@ -467,6 +477,7 @@ function hSetup(){
   const c = H.cfg, nc = c.cats.filter(x => x.name.trim()).length;
   app.innerHTML = `<div class="wrap">
     ${hTopBar(H.s.startedAt ? '<button class="ghost small" id="backLive">Volver a la sesión</button>' : "")}
+    ${H.s.open && H.s.startedAt ? "" : '<p class="warnBar">⚠️ Los estudiantes ya pueden anotar el PIN <b>' + esc(H.s.code) + '</b>, pero se quedan esperando hasta que toque <b>3. Abrir la votación</b> (abajo).</p>'}
     <div class="setGrid">
       <section class="box">
         <h2><span class="step">1.</span> Proyectos que se van a calificar</h2>
@@ -577,6 +588,7 @@ function hLive(){
       <section class="box"><h2 id="pplTitle">Estudiantes</h2><div class="people" id="people"></div></section>
       <section class="box"><div class="row"><h2>Resultados</h2><span class="spacer"></span><span class="hint">Se actualiza solo con cada voto</span></div><div id="results"></div></section>
     </div>
+    <section class="box"><div class="row"><h2>🗳️ Votos de cada estudiante</h2><span class="spacer"></span><span class="hint">Cómo ordenó cada uno los proyectos, del mejor al peor</span></div><div id="votes"></div></section>
   </div>`;
   hWirePin();
   $("toSetup").onclick = () => { H.view = "setup"; hRender(); };
@@ -603,6 +615,7 @@ function hRenderPeople(){
   box.onclick = e => { const b = e.target.closest("button[data-k]"); if(!b) return; if(b.dataset.armed){ hKick(b.dataset.k); return; } b.dataset.armed = "1"; b.textContent = "¿Sacar?"; setTimeout(() => { if(b.isConnected){ delete b.dataset.armed; b.textContent = "✕"; } }, 3000); };
 }
 function hRenderResults(){
+  hRenderVotes();
   const box = $("results"); if(!box) return;
   const s = H.s, { rows } = allResults();
   box.innerHTML = `<div class="tableWrap"><table>
@@ -613,6 +626,7 @@ function hRenderResults(){
       <td class="n cell"><b>${r.any ? fmt0(r.total) : "—"}</b><small>de ${s.cats.length * 100}</small></td>
     </tr>`).join("")}</tbody>
   </table></div>
+  <p class="hint" style="display:none"></p>
   <p class="hint">En cada rubro, el proyecto puesto de 1° recibe 100 puntos y el último 0 (los del medio, en proporción), y se promedian todos los votos. El general es la suma de todos los rubros. Nadie vota por su propio proyecto. ${(s.profW ?? 50) ? "El voto de la profe vale el " + (s.profW ?? 50) + " % del puntaje y el de los estudiantes el " + (100 - (s.profW ?? 50)) + " %." : "El voto de la profe cuenta como uno más."}</p>`;
 }
 // la profe ordena TODOS los proyectos en cada categoría
@@ -665,6 +679,18 @@ function podiumCard(title, emoji, top, sub, isGeneral, delay){
     <h3><span class="e">${emoji}</span>${esc(title)}</h3>${sub ? `<p class="sub">${sub}</p>` : ""}
     ${top.length ? `<div class="stand">${spot(top[1],1)}${spot(top[0],0)}${spot(top[2],2)}</div>` : '<p class="hint" style="text-align:center;padding-bottom:18px">Todavía no hay votos.</p>'}
   </div>`;
+}
+function hRenderVotes(){
+  const box = $("votes"); if(!box) return;
+  const s = H.s, pname = id => (s.projects.find(x => x.id === id) || {}).name || "—";
+  const who = Object.entries(s.players).map(([cid,p]) => ({ cid, name:p.name, group:pname(p.group), prof:false }));
+  if(s.ranks[PROF]) who.unshift({ cid:PROF, name:"🧑‍🏫 Profe", group:"", prof:true });
+  const rows = who.filter(w => s.ranks[w.cid] && Object.keys(s.ranks[w.cid]).length);
+  box.innerHTML = rows.length ? `<div class="tableWrap"><table class="votes">
+    <thead><tr><th>Estudiante</th>${s.cats.map(c => `<th>${esc(c.emoji)} ${esc(c.name)}</th>`).join("")}</tr></thead>
+    <tbody>${rows.map(w => `<tr class="${w.prof ? "profRow" : ""}"><td><span class="vn">${esc(w.name)}</span>${w.group && w.group !== "—" ? `<span class="vg">${esc(w.group)}</span>` : ""}</td>
+      ${s.cats.map((c,ci) => { const o = s.ranks[w.cid][ci]; return `<td>${o ? `<ol>${o.map(id => `<li>${esc(pname(id))}</li>`).join("")}</ol>` : '<span class="muted">Falta</span>'}</td>`; }).join("")}</tr>`).join("")}</tbody>
+  </table></div>` : '<p class="hint">Todavía nadie ha votado.</p>';
 }
 function hAwards(){
   const s = H.s, { per, rows } = allResults();
@@ -733,7 +759,7 @@ function sJoinView(msg){
       const code = $("inCode").value.replace(/\D/g,"");
       if(code.length !== 4){ err("El PIN tiene 4 números. Véalo en la pantalla de la profe."); return; }
       S.code = code; err(""); $("joinBtn").disabled = true; $("joinBtn").textContent = "Buscando la sesión…";
-      sCheckPin(code, st2 => { S.st = st2; S.pinOk = true; sJoinView(); }, m => { $("joinBtn").disabled = false; $("joinBtn").textContent = "Siguiente →"; err(m); });
+      sCheckPin(code, st2 => { S.st = st2; if(!st2.open) sWaitOpen(); else { S.pinOk = true; sJoinView(); } }, m => { $("joinBtn").disabled = false; $("joinBtn").textContent = "Siguiente →"; err(m); });
     };
   } else {
     $("chPin").onclick = () => { S.pinOk = false; sJoinView(); };
@@ -747,6 +773,19 @@ function sJoinView(msg){
       S.attempts = 0; sStart();
     };
   }
+}
+// el PIN es correcto pero la profe todavía no abre la votación: esperar y entrar solo cuando la abra
+function sWaitOpen(){
+  app.innerHTML = `<div class="phone">${sHero()}
+    <div class="box wait"><div class="ic">⏳</div><h2>Esperando a la profe</h2>
+      <p class="muted">El PIN <b style="color:var(--gold)">${esc(S.code)}</b> es correcto. Apenas la profe abra la votación, esta pantalla sigue sola.</p>
+      <button class="ghost small" id="chPin2">Cambiar PIN</button></div></div>`;
+  $("chPin2").onclick = () => { clearTimeout(S.waitT); S.pinOk = false; sJoinView(); };
+  clearTimeout(S.waitT);
+  S.waitT = setTimeout(function again(){
+    sCheckPin(S.code, st => { if(st.open){ S.st = st; S.pinOk = true; beep(880,90); sJoinView(); } else S.waitT = setTimeout(again, 3000); },
+      () => { S.waitT = setTimeout(again, 4000); });
+  }, 3000);
 }
 // mientras elige su grupo, mantener al día cuáles están llenos
 function sRefreshGroups(){
@@ -769,7 +808,7 @@ function sCheckPin(code, ok, fail){
     return room.child("state").once("value").then(s2 => {
       clearTimeout(t);
       const st = s2.val();
-      if(!st || !st.open){ fail("La profe todavía no ha abierto la votación. Espere un momento."); return; }
+      if(!st){ fail("La sesión todavía se está preparando. Espere un momento e intente de nuevo."); return; }
       ok(st);
     });
   }).catch(e => { clearTimeout(t); console.error(e); fail("No se pudo revisar el PIN. Avise a la profe."); });
