@@ -110,6 +110,9 @@ td.proj{font-weight:900;min-width:170px}
 @keyframes popIn{from{opacity:0;transform:translateY(16px) scale(.96)}to{opacity:1;transform:none}}
 .podChk{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:800;white-space:nowrap;color:var(--mute)}
 .podChk input{width:18px;height:18px;accent-color:var(--gold)}
+.shareAw{display:flex;flex-direction:column;align-items:center;gap:6px;margin:-4px 0 18px;text-align:center}
+.shareAw button{font-size:18px;padding:12px 20px}
+#awView .stand{gap:6px}
 .pods{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:18px}
 .podiumCard{background:var(--panel);border:2px solid var(--line);border-radius:22px;padding:18px 16px 0;display:flex;flex-direction:column;gap:10px;overflow:hidden;animation:popIn .5s cubic-bezier(.2,.9,.3,1.3) both}
 .podiumCard.general{border-color:var(--gold);background:linear-gradient(180deg,#3a2a06,var(--panel) 60%);grid-column:1 / -1}
@@ -352,9 +355,9 @@ function connFor(cid){ if(!H.conns[cid]) H.conns[cid] = new FbConn(H.s.code, cid
 
 function hStateMsg(){
   const s = H.s;
-  return { t:"state", game:GAME, open:!!s.open && !!s.startedAt, projects:s.projects, cats:s.cats, maxPer:s.maxPer || 3, members:membersMap(), names:namesMap() };
+  return { t:"state", game:GAME, awards:s.showAwards ? awardsData() : null, open:!!s.open && !!s.startedAt, projects:s.projects, cats:s.cats, maxPer:s.maxPer || 3, members:membersMap(), names:namesMap() };
 }
-function hBroadcast(){ if(!H.roomRef) return; const m = hStateMsg(); m.hb = Date.now(); try{ H.roomRef.child("state").set(clean(m)); }catch(e){ console.error(e); } }
+function hBroadcast(){ if(!H.roomRef) return;  const m = hStateMsg(); m.hb = Date.now(); try{ H.roomRef.child("state").set(clean(m)); }catch(e){ console.error(e); } }
 
 function hOnData(cid, d){
   if(!d || typeof d !== "object") return;
@@ -674,7 +677,8 @@ function hProfVote(ci){
 }
 // un podio: 2° a la izquierda, 1° al centro, 3° a la derecha
 function podiumCard(title, emoji, top, sub, isGeneral, delay){
-  const spot = (x, k) => x ? `<div class="spot s${k+1}"><span class="m">${MEDALS[k]}</span><b>${esc(x.name)}</b>${namesOf(x.id).length ? `<small>${esc(namesOf(x.id).join(", "))}</small>` : ""}<span class="pts">${fmt0(x.pts)} pts</span><div class="blk">${k+1}</div></div>` : '<div class="spot"></div>';
+  const who = x => x.members || namesOf(x.id);
+  const spot = (x, k) => x ? `<div class="spot s${k+1}"><span class="m">${MEDALS[k]}</span><b>${esc(x.name)}</b>${who(x).length ? `<small>${esc(who(x).join(", "))}</small>` : ""}<span class="pts">${fmt0(x.pts)} pts</span><div class="blk">${k+1}</div></div>` : '<div class="spot"></div>';
   return `<div class="podiumCard ${isGeneral ? "general" : ""}" style="animation-delay:${delay}s">
     <h3><span class="e">${emoji}</span>${esc(title)}</h3>${sub ? `<p class="sub">${sub}</p>` : ""}
     ${top.length ? `<div class="stand">${spot(top[1],1)}${spot(top[0],0)}${spot(top[2],2)}</div>` : '<p class="hint" style="text-align:center;padding-bottom:18px">Todavía no hay votos.</p>'}
@@ -692,6 +696,13 @@ function hRenderVotes(){
       ${s.cats.map((c,ci) => { const o = s.ranks[w.cid][ci]; return `<td>${o ? `<ol>${o.map(id => `<li>${esc(pname(id))}</li>`).join("")}</ol>` : '<span class="muted">Falta</span>'}</td>`; }).join("")}</tr>`).join("")}</tbody>
   </table></div>` : '<p class="hint">Todavía nadie ha votado.</p>';
 }
+function awardsData(){
+  const s = H.s, { per, rows } = allResults();
+  const cards = s.cats.map((c,ci) => ({ c, ci })).filter(x => x.c.podium !== false)
+    .map(x => ({ title:x.c.name, emoji:x.c.emoji, top:per[x.ci].filter(r => r.votes).slice(0,3).map(r => ({ name:r.name, members:namesOf(r.id), pts:r.score })) }));
+  const gen = rows.filter(r => r.any).slice(0,3).map(r => ({ name:r.name, members:namesOf(r.id), pts:r.total }));
+  return { cards, gen, sub:"La suma de todos los rubros (" + s.cats.map(c => c.name).join(" + ") + ")" };
+}
 function hAwards(){
   const s = H.s, { per, rows } = allResults();
   const cards = s.cats.map((c,ci) => ({ c, ci })).filter(x => x.c.podium !== false)
@@ -700,12 +711,15 @@ function hAwards(){
   app.innerHTML = `<div class="wrap">
     ${hTopBar('<button class="ghost small" id="backLive">← Volver a los resultados</button>')}
     <h2 style="text-align:center;font-size:clamp(32px,5vw,56px)">🏆 Premios</h2>
+    <div class="shareAw"><button class="${s.showAwards ? "ghost" : "go"}" id="shareAw">${s.showAwards ? "🙈 Ocultar el podio de los celulares" : "📲 Mostrar el podio a los estudiantes"}</button>
+      <span class="hint">${s.showAwards ? "✅ Los estudiantes ya ven el podio en su celular." : "Por ahora solo usted lo ve. Tóquelo cuando quiera revelarlo."}</span></div>
     <div class="pods">${cards.join("")}
       ${podiumCard("Mejor proyecto general", "👑", gen, "La suma de todos los rubros (" + s.cats.map(c => esc(c.name)).join(" + ") + ")", true, cards.length * .2)}
     </div>
   </div>`;
   hWirePin();
   $("backLive").onclick = () => { H.view = "live"; hRender(); };
+  $("shareAw").onclick = () => { s.showAwards = !s.showAwards; hSave(); hBroadcast(); toast(s.showAwards ? "📲 El podio ya está en los celulares." : "Podio oculto de los celulares."); hAwards(); };
   [523,659,784,1047].forEach((f,k) => setTimeout(() => beep(f,240,"triangle"), 900 + k*150));
   setTimeout(confetti, 1000);
 }
@@ -818,7 +832,7 @@ function sStart(){
   if(S.room){ try{ S.room.child("state").off(); S.room.child("inbox/" + S.cid).off(); }catch(e){} }
   S.room = NET.room(S.code);
   S.room.child("inbox/" + S.cid).on("child_added", s2 => { const d = s2.val(); s2.ref.remove(); S.lastHeard = Date.now(); sOnData(d); });
-  S.room.child("state").on("value", s2 => { const d = s2.val(); if(d){ S.lastHeard = Date.now(); const was = S.st; S.st = d; if(S.joined) sOnState(d, was); else sRefreshGroups(); } });
+  S.room.child("state").on("value", s2 => { const d = s2.val(); if(d){ S.lastHeard = Date.now(); const was = S.st; S.st = d; if(S.joined || d.awards || (was && was.awards && $("awView"))) sOnState(d, was); else sRefreshGroups(); } });
   sConnect();
 }
 function sConnect(){
@@ -845,7 +859,21 @@ function sOnData(d){
   }
   if(d.t === "closed"){ toast("La profe cerró la votación."); sMenu(); }
 }
+function sAwards(d){
+  const a = d.awards, key = JSON.stringify(a);
+  if($("awView") && S.awKey === key) return;
+  const first = !$("awView"); S.awKey = key;
+  app.innerHTML = `<div class="phone" id="awView">${S.joined ? sHead() : ""}
+    <h2 style="text-align:center;font-size:clamp(30px,8vw,44px);margin:4px 0 0">🏆 Premios</h2>
+    <p class="hint" style="text-align:center;margin:0">¡Felicidades a todos los grupos!</p>
+    <div class="pods">${(a.cards || []).map((c,k) => podiumCard(c.title, esc(c.emoji), c.top || [], "", false, k * .2)).join("")}
+      ${podiumCard("Mejor proyecto general", "👑", a.gen || [], esc(a.sub || ""), true, (a.cards || []).length * .2)}</div>
+  </div>`;
+  if(first){ [523,659,784,1047].forEach((f,k) => setTimeout(() => beep(f,240,"triangle"), 900 + k*150)); setTimeout(confetti, 1000); }
+}
 function sOnState(d, was){
+  if(d.awards){ sAwards(d); return; }
+  if(was && was.awards){ if(S.joined) sMenu(); else sJoinView(); return; }
   const sig = x => x ? JSON.stringify([x.projects, x.cats, x.open]) : "";
   if(sig(d) !== sig(was)){ if(!d.open || !$("rankView")) sMenu(); }
 }
