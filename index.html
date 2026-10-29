@@ -732,6 +732,7 @@ const S = { code:"", name:"", group:"", cid:"", joined:false, st:null, done:{}, 
 function studentInit(){
   S.cid = (ss.get("coeval_cid") || (Math.random().toString(36).slice(2) + Date.now().toString(36))).replace(/[^a-z0-9]/gi,"");
   ss.set("coeval_cid", S.cid);
+  const sala = new URLSearchParams(location.search).get("sala"); if(sala) S.code = sala.replace(/D/g,"").slice(0,4);
   sJoinView();
   setInterval(() => { if(S.joined) sSend({ t:"ping" }); if(S.joined && Date.now() - (S.lastHeard || 0) > 25000){ S.lastHeard = Date.now(); S.attempts = 0; sConnect(); } }, 4000);
 }
